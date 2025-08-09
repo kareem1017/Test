@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fitralabs Flappy</title>
+
+  <!-- Mobile / PWA-ish meta -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f0f12">
+
+  <style>
+    :root{
+      --bg:#0b0e12;
+      --ink:#eaf2ff;
+      --muted:#8ea3c0;
+      --brand:#00e0b8;
+      --brand2:#4d7cff;
+      --danger:#ff4d6d;
+      --panel:#121620cc;
+      --panel-solid:#121620;
+      --btn:#1b2130;
+      --btn-hover:#262f45;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b0e12 0%,#0a1017 100%);color:var(--ink);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    #wrap{position:fixed;inset:0;display:grid;place-items:center}
+    canvas{display:block;touch-action:none;user-select:none;background:linear-gradient(180deg,#0a1a2b 0%, #0b1724 50%, #0a1320 100%)}
+
+    /* HUD */
+    .hud{
+      position:fixed;inset:0;pointer-events:none;
+      display:flex;flex-direction:column;justify-content:space-between;
+      padding:14px;
+    }
+    .row{display:flex;gap:10px;align-items:center}
+    .spacer{flex:1}
+    .chip{
+      pointer-events:auto;
+      background:var(--btn);border:1px solid #2b3550;color:var(--ink);
+      padding:8px 12px;border-radius:10px;box-shadow:var(--shadow);
+      font-weight:600;letter-spacing:.2px;cursor:pointer;user-select:none;
+      transition:.15s ease;
+    }
+    .chip:hover{background:var(--btn-hover)}
+    .score{
+      background:linear-gradient(180deg,#10182a,#0f1726);
+      border:1px solid #24304b;border-radius:12px;padding:6px 12px;
+      font-weight:800;letter-spacing:.6px;box-shadow:var(--shadow);min-width:84px;text-align:center
+    }
+    .badge{opacity:.8;font-weight:600}
+
+    /* Start/Settings overlay */
+    .overlay{
+      position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(1200px 800px at 50% 20%, rgba(0,224,184,.10), transparent 70%), radial-gradient(1000px 1200px at 80% 90%, rgba(77,124,255,.10), transparent 70%);
+      padding:18px;
+    }
+    .panel{
+      width:min(680px,92vw);
+      background:var(--panel);backdrop-filter:blur(10px);
+      border:1px solid #24304b;border-radius:16px;box-shadow:var(--shadow);
+      padding:22px;
+    }
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{
+      width:42px;height:42px;border-radius:10px;display:grid;place-items:center;
+      background:conic-gradient(from 0deg, var(--brand), var(--brand2));
+      color:#021; font-weight:900; box-shadow:0 8px 24px rgba(0,224,184,.35);
+    }
+    h1{margin:8px 0 2px;font-size:28px;letter-spacing:.4px}
+    .sub{margin:0 0 14px;color:var(--muted);font-weight:600}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    @media (min-width:680px){.grid{grid-template-columns:1fr 1fr}}
+    .card{
+      background:linear-gradient(180deg,#101624,#0f1422);
+      border:1px solid #24304b;border-radius:14px;padding:14px;
+    }
+    .rowc{display:flex;flex-wrap:wrap;gap:10px}
+    .swatch{
+      width:36px;height:36px;border-radius:9px;border:2px solid #1f2a44;cursor:pointer;
+      outline:2px solid transparent;transition:.12s;
+    }
+    .swatch.active{outline:2px solid var(--brand)}
+    .range{width:100%}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+    .big{padding:12px 16px;font-size:16px}
+    .warning{color:#ff9aa8;font-weight:600;margin-top:6px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div id="wrap"><canvas id="game"></canvas></div>
+
+  <!-- HUD -->
+  <div class="hud" aria-hidden="true">
+    <div class="row">
+      <div class="score" id="score">SCORE 0</div>
+      <div class="score" id="best">BEST 0</div>
+      <div class="spacer"></div>
+      <button class="chip" id="pauseBtn">⏸ Pause</button>
+      <button class="chip" id="restartBtn">↻ Restart</button>
+      <button class="chip" id="muteBtn">🔊</button>
+    </div>
+    <div class="row" style="justify-content:center;">
+      <div class="badge">Tap / Click to flap • Space/↑ also works</div>
+    </div>
+  </div>
+
+  <!-- Start / Settings -->
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <div class="brand">
+        <div class="logo">ف</div>
+        <div>
+          <h1>Fitralabs Flappy</h1>
+          <div class="sub">Tune your flight. Then tap <b>Start</b>.</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:8px">Bird color</div>
+          <div class="rowc" id="colorRow"></div>
+        </div>
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:8px">Game feel</div>
+          <label>Gravity <small id="gVal"></small></label>
+          <input id="gravity" class="range" type="range" min="0.16" max="0.45" step="0.01" value="0.22">
+          <label style="margin-top:8px;">Flap strength <small id="fVal"></small></label>
+          <input id="flap" class="range" type="range" min="4.5" max="9.5" step="0.1" value="7.2">
+          <label style="margin-top:8px;">Pipe speed <small id="sVal"></small></label>
+          <input id="speed" class="range" type="range" min="2.2" max="5.2" step="0.1" value="3.2">
+          <label style="margin-top:8px;">Gap size <small id="gapVal"></small></label>
+          <input id="gap" class="range" type="range" min="140" max="240" step="2" value="190">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="chip big" id="startBtn" style="background:linear-gradient(90deg,var(--brand),var(--brand2));border:0;color:#021">▶ Start</button>
+        <button class="chip big" id="calmBtn">Calm mode</button>
+        <button class="chip big" id="hardBtn">Hard mode</button>
+        <div class="spacer"></div>
+        <div class="warning">Tip: Add to Home Screen for full-screen play.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Canvas setup with DPR scaling
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, window.devicePixelRatio || 1);
+  let W=0,H=0; resize();
+  window.addEventListener('resize', resize);
+  function resize(){
+    DPR = Math.max(1, window.devicePixelRatio || 1);
+    W = Math.floor(window.innerWidth  * DPR);
+    H = Math.floor(window.innerHeight * DPR);
+    canvas.width = W; canvas.height = H;
+    canvas.style.width  = (W/DPR) + 'px';
+    canvas.style.height = (H/DPR) + 'px';
+  }
+
+  // UI elements
+  const scoreEl = document.getElementById('score');
+  const bestEl  = document.getElementById('best');
+  const pauseBtn= document.getElementById('pauseBtn');
+  const restartBtn=document.getElementById('restartBtn');
+  const muteBtn = document.getElementById('muteBtn');
+
+  const startOverlay = document.getElementById('startOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const calmBtn  = document.getElementById('calmBtn');
+  const hardBtn  = document.getElementById('hardBtn');
+  const gRange = document.getElementById('gravity');
+  const fRange = document.getElementById('flap');
+  const sRange = document.getElementById('speed');
+  const gapRange = document.getElementById('gap');
+  const gVal = document.getElementById('gVal');
+  const fVal = document.getElementById('fVal');
+  const sVal = document.getElementById('sVal');
+  const gapVal = document.getElementById('gapVal');
+
+  // Colors
+  const COLORS = ['#ffd166','#06d6a0','#4cc9f0','#f72585','#ff9f1c','#a7f3d0','#b388ff','#f8f9fa'];
+  const colorRow = document.getElementById('colorRow');
+  let birdColor = COLORS[0];
+  COLORS.forEach((c,i)=>{
+    const d = document.createElement('div');
+    d.className = 'swatch' + (i===0?' active':'');
+    d.style.background = c;
+    d.addEventListener('click', ()=>{
+      document.querySelectorAll('.swatch').forEach(x=>x.classList.remove('active'));
+      d.classList.add('active'); birdColor = c;
+    });
+    colorRow.appendChild(d);
+  });
+
+  // HUD state
+  let muted = false;
+  muteBtn.onclick = ()=>{ muted=!muted; muteBtn.textContent = muted?'🔇':'🔊' };
+
+  // Sounds (tiny bleeps via WebAudio)
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let actx; function beep(freq=880, time=0.07, type='square', gain=0.03){
+    if(muted) return;
+    try{
+      if(!actx) actx = new AudioCtx();
+      const o = actx.createOscillator();
+      const g = actx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = gain;
+      o.connect(g); g.connect(actx.destination);
+      o.start();
+      o.stop(actx.currentTime + time);
+    }catch(e){}
+  }
+
+  // Game parameters (tweakable)
+  let gravity = parseFloat(gRange.value);   // ↓ fall rate (lower = slower fall)
+  let flapStrength = parseFloat(fRange.value); // ↑ jump impulse
+  let pipeSpeed = parseFloat(sRange.value); // → pipe horizontal speed
+  let gapSize = parseFloat(gapRange.value); // gap height
+  updateRangeBadges();
+  [gRange,fRange,sRange,gapRange].forEach(r=>r.addEventListener('input',()=>{
+    gravity = parseFloat(gRange.value);
+    flapStrength = parseFloat(fRange.value);
+    pipeSpeed = parseFloat(sRange.value);
+    gapSize = parseFloat(gapRange.value);
+    updateRangeBadges();
+  }));
+  function updateRangeBadges(){
+    gVal.textContent   = `(${gravity.toFixed(2)})`;
+    fVal.textContent   = `(${flapStrength.toFixed(1)})`;
+    sVal.textContent   = `(${pipeSpeed.toFixed(1)})`;
+    gapVal.textContent = `(${Math.round(gapSize)}px)`;
+  }
+
+  // Quick presets
+  calmBtn.onclick = ()=>{
+    gRange.value = 0.19; fRange.value = 7.6; sRange.value = 2.6; gapRange.value = 210;
+    gRange.dispatchEvent(new Event('input'));
+  };
+  hardBtn.onclick = ()=>{
+    gRange.value = 0.28; fRange.value = 6.8; sRange.value = 4.2; gapRange.value = 165;
+    gRange.dispatchEvent(new Event('input'));
+  };
+
+  // Game state
+  let bird, pipes, score, best= +(localStorage.getItem('fitra_flappy_best')||0);
+  bestEl.textContent = `BEST ${best}`;
+  let running=false, paused=false, dead=false, tPrev=0;
+
+  function reset(){
+    score=0; dead=false; paused=false;
+    bird = {
+      x: W*0.28, y: H*0.45, r: 16*DPR,
+      vy: 0, rot: 0, color: birdColor,
+    };
+    pipes = [];
+    // Seed a couple pipes
+    for(let i=0;i<3;i++){
+      spawnPipe(W + i*(W*0.45));
+    }
+    updateHUD();
+  }
+
+  function spawnPipe(xStart){
+    const margin = 40*DPR;
+    const minY = margin + 40*DPR;
+    const maxY = H - margin - 40*DPR - gapSize*DPR;
+    const gapY = rand(minY, maxY);
+    pipes.push({
+      x: xStart,
+      w: 70*DPR,
+      gapY,
+      passed:false,
+    });
+  }
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  // Drawing helpers
+  function drawBg(){
+    // subtle stars / parallax
+    ctx.save();
+    ctx.fillStyle = ctx.createLinearGradient(0,0,0,H);
+    ctx.fillStyle.addColorStop?.(0,'#091a2a');
+    ctx.fillStyle.addColorStop?.(1,'#0a1220');
+    ctx.fillRect(0,0,W,H);
+
+    // ground line
+    ctx.strokeStyle = 'rgba(255,255,255,.06)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath(); ctx.moveTo(0,H-32*DPR); ctx.lineTo(W,H-32*DPR); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBird(){
+    const {x,y,r,color} = bird;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(bird.rot);
+    // body
+    ctx.fillStyle = color;
+    roundRect(ctx, -r*1.0, -r*0.8, r*2.0, r*1.6, r*0.6); ctx.fill();
+    // eye
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(r*0.4, -r*0.2, r*0.28, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(r*0.48, -r*0.18, r*0.12, 0, Math.PI*2); ctx.fill();
+    // beak
+    ctx.fillStyle = '#ffcf5a';
+    ctx.beginPath();
+    ctx.moveTo(r*0.9, 0);
+    ctx.lineTo(r*1.45, -r*0.18);
+    ctx.lineTo(r*0.9,  -r*0.36);
+    ctx.closePath(); ctx.fill();
+    // wing
+    ctx.fillStyle = 'rgba(0,0,0,.15)';
+    roundRect(ctx, -r*0.6, 0, r*1.0, r*0.5, r*0.25); ctx.fill();
+    ctx.restore();
+  }
+
+  function roundRect(c, x,y,w,h,r){
+    c.beginPath();
+    c.moveTo(x+r,y);
+    c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r);
+    c.arcTo(x,y+h,x,y,r);
+    c.arcTo(x,y,x+w,y,r);
+    c.closePath();
+  }
+
+  function drawPipes(){
+    ctx.save();
+    const topCol = '#1f2937', botCol = '#10161f', lipCol='#2c3a52';
+    pipes.forEach(p=>{
+      const x=p.x, w=p.w, gy=p.gapY, gap=gapSize*DPR;
+
+      // top pipe
+      ctx.fillStyle = topCol;
+      ctx.fillRect(x, 0, w, gy);
+      // lip
+      ctx.fillStyle = lipCol;
+      ctx.fillRect(x-4*DPR, gy-14*DPR, w+8*DPR, 14*DPR);
+
+      // bottom pipe
+      ctx.fillStyle = botCol;
+      ctx.fillRect(x, gy+gap, w, H-(gy+gap)-32*DPR);
+      // lip
+      ctx.fillStyle = lipCol;
+      ctx.fillRect(x-4*DPR, gy+gap, w+8*DPR, 14*DPR);
+    });
+    ctx.restore();
+  }
+
+  // Physics & loop
+  function step(dt){
+    if(paused || dead) return;
+
+    // Bird physics (gentler fall, slightly damp rotation)
+    bird.vy += gravity*DPR;        // gravity
+    bird.y  += bird.vy*DPR*0.6;    // position integrate (0.6 to soften)
+    const targetRot = Math.max(-0.35, Math.min(0.9, bird.vy/22));
+    bird.rot += (targetRot - bird.rot)*0.15;
+
+    // World
+    const move = pipeSpeed*DPR;
+    for(let i=0;i<pipes.length;i++){
+      const p = pipes[i];
+      p.x -= move;
+      // score
+      if(!p.passed && p.x + p.w < bird.x - bird.r){
+        p.passed = true; score++; beep(640,.05,'square',.025); updateHUD();
+      }
+    }
+
+    // recycle pipes
+    if(pipes[0].x + pipes[0].w < 0){
+      pipes.shift();
+      spawnPipe(pipes[pipes.length-1].x + W*0.45);
+    }
+
+    // Collisions
+    const gy = (pp)=>pp.gapY, gap = gapSize*DPR;
+    for(const p of pipes){
+      const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + p.w;
+      if(inX){
+        const topHit = bird.y - bird.r < gy(p);
+        const botHit = bird.y + bird.r > gy(p)+gap;
+        if(topHit || botHit){
+          die(); return;
+        }
+      }
+    }
+    // Ground / ceiling
+    if(bird.y - bird.r < 0) { bird.y = bird.r; bird.vy=0; }
+    if(bird.y + bird.r > H - 32*DPR){ die(); }
+  }
+
+  function render(){
+    drawBg();
+    drawPipes();
+    drawBird();
+    if(dead){
+      ctx.save();
+      ctx.fillStyle='rgba(0,0,0,.45)';
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#fff';
+      ctx.font = `${28*DPR}px system-ui, sans-serif`;
+      ctx.textAlign='center';
+      ctx.fillText('Game Over', W/2, H/2 - 26*DPR);
+      ctx.font = `${16*DPR}px system-ui, sans-serif`;
+      ctx.fillText('Tap ↻ Restart', W/2, H/2 + 6*DPR);
+      ctx.restore();
+    }
+  }
+
+  function loop(ts){
+    if(!running){ tPrev = ts; requestAnimationFrame(loop); return; }
+    const dt = Math.min(32, ts - tPrev); tPrev = ts;
+    step(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function updateHUD(){
+    scoreEl.textContent = `SCORE ${score}`;
+    if(score>best){ best=score; localStorage.setItem('fitra_flappy_best', best); bestEl.textContent = `BEST ${best}`; }
+  }
+
+  function flap(){
+    if(dead) return;
+    bird.vy = -flapStrength*DPR;
+    bird.rot = -0.35;
+    beep(920,.05,'square',.02);
+  }
+
+  function die(){
+    if(dead) return;
+    dead=true; beep(180,.25,'sawtooth',.04);
+    setTimeout(()=>{ paused=true; }, 30);
+  }
+
+  // Controls
+  canvas.addEventListener('pointerdown', ()=>{ if(!running) return; if(dead) return; flap(); }, {passive:true});
+  window.addEventListener('keydown', (e)=>{
+    if(e.code==='Space' || e.code==='ArrowUp'){ e.preventDefault(); if(!running) return; if(dead) return; flap(); }
+    if(e.code==='KeyP') togglePause();
+    if(e.code==='KeyR') restart();
+  }, {passive:false});
+
+  pauseBtn.onclick = togglePause;
+  restartBtn.onclick = restart;
+  function togglePause(){
+    if(!running || dead) return;
+    paused = !paused;
+    pauseBtn.textContent = paused?'▶ Resume':'⏸ Pause';
+    if(!paused) beep(540,.06,'triangle',.02);
+  }
+  function restart(){
+    reset();
+    paused=false; dead=false;
+    pauseBtn.textContent='⏸ Pause';
+    beep(520,.06,'triangle',.02);
+  }
+
+  // Start flow
+  startBtn.onclick = begin;
+  function begin(){
+    startOverlay.classList.add('hidden');
+    reset();
+    running=true; paused=false;
+    beep(520,.06,'triangle',.02);
+  }
+
+  // Make overlay consume taps (so page doesn't flap before start)
+  startOverlay.addEventListener('pointerdown', (e)=>e.stopPropagation(), {passive:true});
+
+})();
+</script>
+</body>
+</html>
